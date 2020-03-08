@@ -4,9 +4,9 @@
 
 const args = require("yargs").array("intents").argv;
 const exec = require("child_process").execSync;
-const region_id = "us-east-1";
 const csv = require("csv-parser");
 const fs = require("fs");
+const region_id = "us-east-1";
 
 console.log("Spreadsheet: " + args.sheet);
 console.log("Intent List: " + args.intents);
@@ -15,67 +15,51 @@ async function addUtterances() {
   args.intents.forEach(async intent => {
     // Read CSV File
     let utterances = await readCSV(args.sheet, intent);
-
     var getIntentCmd = `aws lex-models get-intent --region ${region_id} --name ${intent} --intent-version $LATEST > intent.json`;
     try {
       const aws_response1 = exec(getIntentCmd);
-
       // Read intent.json file
-      fs.readFile("intent.json", function(err, data) {
-        // Check for errors
-        if (err) throw err;
+      var data = fs.readFileSync("intent.json");
+      // Converting to JSON
+      const intentJson = JSON.parse(data);
+      delete intentJson["createdDate"];
+      delete intentJson["lastUpdatedDate"];
+      delete intentJson["version"];
+      for (var utterance of utterances) {
+        intentJson["sampleUtterances"].push(utterance);
+      }
+      //Check and remove duplicates
+      intentJson["sampleUtterances"] = removeDuplicates(
+        intentJson["sampleUtterances"]
+      );
+      // Writing to intent.json file
+      fs.writeFileSync("intent.json", JSON.stringify(intentJson));
+      console.log("Done writing to intent.json"); // Success
+      var updateIntendCmd = `aws lex-models put-intent --region ${region_id} --name ${intent} --cli-input-json file://intent.json`;
+      const aws_response2 = exec(updateIntendCmd);
+      console.log(`AWS Update Intent Response for ${intent}: `, aws_response2);
+      if (args.bot) {
+        console.log(`Rebuilding ${args.bot} Bot...`);
+        var getBotCmd = `aws lex-models get-bot --region ${region_id} --name ${args.bot} --version-or-alias $LATEST > bot.json`;
+        const getBotResponse = exec(getBotCmd);
+        console.log("Get Bot Response: ", getBotResponse);
+        // Read json file
+        var botData = fs.readFileSync("bot.json");
+        console.log("Reading bot.json file");
         // Converting to JSON
-        const intentJson = JSON.parse(data);
-        delete intentJson["createdDate"];
-        delete intentJson["lastUpdatedDate"];
-        delete intentJson["version"];
-        for (var utterance of utterances) {
-          intentJson["sampleUtterances"].push(utterance);
-        }
-
-        intentJson["sampleUtterances"] = removeDuplicates(intentJson["sampleUtterances"]);
-        console.log("iNTENT Json: ", intentJson);
-
-        // Writing to a file
-        fs.writeFile("intent.json", JSON.stringify(intentJson), err => {
-          // Checking for errors
-          if (err) throw err;
-
-          console.log("Done writing to intent.json"); // Success
-          var updateIntendCmd = `aws lex-models put-intent --region ${region_id} --name ${intent} --cli-input-json file://intent.json`;
-          const aws_response2 = exec(updateIntendCmd);
-          console.log("AWS Update Intent Response: ", aws_response2);
-          if (args.bot) {
-            console.log(`Rebuilding ${args.bot} Bot...`);
-            var getBotCmd = `aws lex-models get-bot --region ${region_id} --name ${args.bot} --version-or-alias $LATEST > bot.json`;
-            const getBotResponse = exec(getBotCmd);
-            console.log("Get Bot Response: ", getBotResponse);
-
-            // Read json file
-            fs.readFile("bot.json", function(err, data) {
-              console.log("Reading bot.json file");
-              // Check for errors
-              if (err) throw err;
-              // Converting to JSON
-              const botJson = JSON.parse(data);
-              delete botJson["createdDate"];
-              delete botJson["lastUpdatedDate"];
-              delete botJson["status"];
-              delete botJson["version"];
-              botJson["processBehavior"] = "BUILD";
-              // Writing to a file
-              fs.writeFile("bot.json", JSON.stringify(botJson), err => {
-                // Checking for errors
-                if (err) throw err;
-                console.log("Done writing to bot.json"); // Success
-                var rebuildBotCmd = `aws lex-models put-bot --region ${region_id} --name ${args.bot} --cli-input-json file://bot.json`;
-                const rebuildBotResponse = exec(rebuildBotCmd);
-                console.log("Rebuild Bot Response: ", rebuildBotResponse);
-              });
-            });
-          }
-        });
-      });
+        const botJson = JSON.parse(botData);
+        delete botJson["createdDate"];
+        delete botJson["lastUpdatedDate"];
+        delete botJson["status"];
+        delete botJson["version"];
+        botJson["processBehavior"] = "BUILD";
+        // Writing updates to bot.json file
+        fs.writeFileSync("bot.json", JSON.stringify(botJson));
+        console.log("Done writing to bot.json"); // Success
+        var rebuildBotCmd = `aws lex-models put-bot --region ${region_id} --name ${args.bot} --cli-input-json file://bot.json`;
+        const rebuildBotResponse = exec(rebuildBotCmd);
+        console.log("Rebuild Bot Response: ", rebuildBotResponse);
+      }
     } catch (error) {
       console.error(error);
       return;
