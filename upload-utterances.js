@@ -13,9 +13,20 @@ console.log("Intent List: " + args.intents);
 
 async function addUtterances() {
   args.intents.forEach(async intent => {
+    //Get latest intent version from bot
+    var getBotCmd = `aws lex-models get-bot --region ${region_id} --name ${args.bot} --version-or-alias $LATEST > bot.json`;
+    const getBotResponse = exec(getBotCmd);
+    // Read bot json file
+    var botData = fs.readFileSync("bot.json");
+    // Converting to JSON
+    const botJson = JSON.parse(botData);
+    const latestIntentVersion = botJson["intents"].find(a => a["intentName"] == intent);
+
+    console.log(`Latest intent version for ${intent} is ${latestIntentVersion["intentVersion"]}`);
+
     // Read CSV File
     let utterances = await readCSV(args.sheet, intent);
-    var getIntentCmd = `aws lex-models get-intent --region ${region_id} --name ${intent} --intent-version $LATEST > intent.json`;
+    var getIntentCmd = `aws lex-models get-intent --region ${region_id} --name ${intent} --intent-version ${latestIntentVersion["intentVersion"]} > intent.json`;
     try {
       const aws_response1 = exec(getIntentCmd);
       // Read intent.json file
@@ -38,16 +49,9 @@ async function addUtterances() {
       var updateIntendCmd = `aws lex-models put-intent --region ${region_id} --name ${intent} --cli-input-json file://intent.json`;
       const aws_response2 = exec(updateIntendCmd);
       console.log(`AWS Update Intent Response for ${intent}: `, aws_response2);
-      if (args.bot) {
+      if (args.buildBot) {
         console.log(`Rebuilding ${args.bot} Bot...`);
-        var getBotCmd = `aws lex-models get-bot --region ${region_id} --name ${args.bot} --version-or-alias $LATEST > bot.json`;
-        const getBotResponse = exec(getBotCmd);
-        console.log("Get Bot Response: ", getBotResponse);
-        // Read json file
-        var botData = fs.readFileSync("bot.json");
         console.log("Reading bot.json file");
-        // Converting to JSON
-        const botJson = JSON.parse(botData);
         delete botJson["createdDate"];
         delete botJson["lastUpdatedDate"];
         delete botJson["status"];
@@ -82,7 +86,6 @@ async function readCSV(sheet, intent) {
           for (var eachObj of result) {
             if (eachObj.hasOwnProperty(intent) && eachObj[intent] != "") {
               var value = eachObj[intent];
-              //console.log(value);
               intentVals.push(value);
             }
           }
