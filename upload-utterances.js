@@ -14,10 +14,11 @@ console.log("Intent List: " + args.intents);
 async function addUtterances() {
   args.intents.forEach(async intent => {
     //Get latest intent version from bot
-    var getBotCmd = `aws lex-models get-bot --region ${region_id} --name ${args.bot} --version-or-alias $LATEST > bot.json`;
+    const getBotCmd = `aws lex-models get-bot --region ${region_id} --name ${args.bot} --version-or-alias '$LATEST' > bot.json`;
     const getBotResponse = exec(getBotCmd);
     // Read bot json file
-    var botData = fs.readFileSync("bot.json");
+    await getBotResponse
+    const botData = fs.readFileSync("bot.json");
     // Converting to JSON
     const botJson = JSON.parse(botData);
     const latestIntentVersion = botJson["intents"].find(a => a["intentName"] == intent);
@@ -26,16 +27,22 @@ async function addUtterances() {
 
     // Read CSV File
     let utterances = await readCSV(args.sheet, intent);
-    var getIntentCmd = `aws lex-models get-intent --region ${region_id} --name ${intent} --intent-version ${latestIntentVersion["intentVersion"]} > intent.json`;
+    const getIntentCmd = `aws lex-models get-intent --region ${region_id} --name ${intent} --intent-version ${latestIntentVersion["intentVersion"]} > intent.json`;
+    const getLatestIntentCmd = `aws lex-models get-intent --region ${region_id} --name ${intent} --intent-version '$LATEST' > latestIntent.json`;
     try {
-      const aws_response1 = exec(getIntentCmd);
+      await exec(getLatestIntentCmd)
+      await exec(getIntentCmd);
       // Read intent.json file
-      var data = fs.readFileSync("intent.json");
+      const intentData = fs.readFileSync("intent.json");
+      const latestIntentData = fs.readFileSync("latestIntent.json");
       // Converting to JSON
-      const intentJson = JSON.parse(data);
+      const intentJson = JSON.parse(intentData);
+      const latestIntentJson = JSON.parse(latestIntentData)
       delete intentJson["createdDate"];
       delete intentJson["lastUpdatedDate"];
       delete intentJson["version"];
+      // update Cheksum
+      intentJson["checksum"] = latestIntentJson["checksum"];
       for (var utterance of utterances) {
         intentJson["sampleUtterances"].push(utterance);
       }
@@ -46,7 +53,7 @@ async function addUtterances() {
       // Writing to intent.json file
       fs.writeFileSync("intent.json", JSON.stringify(intentJson));
       console.log("Done writing to intent.json"); // Success
-      var updateIntendCmd = `aws lex-models put-intent --region ${region_id} --name ${intent} --cli-input-json file://intent.json`;
+      const updateIntendCmd = `aws lex-models put-intent --region ${region_id} --name ${intent} --cli-input-json file://intent.json`;
       const aws_response2 = exec(updateIntendCmd);
       console.log(`AWS Update Intent Response for ${intent}: `, aws_response2);
       if (args.buildBot) {
@@ -60,7 +67,7 @@ async function addUtterances() {
         // Writing updates to bot.json file
         fs.writeFileSync("bot.json", JSON.stringify(botJson));
         console.log("Done writing to bot.json"); // Success
-        var rebuildBotCmd = `aws lex-models put-bot --region ${region_id} --name ${args.bot} --cli-input-json file://bot.json`;
+        const rebuildBotCmd = `aws lex-models put-bot --region ${region_id} --name ${args.bot} --cli-input-json file://bot.json`;
         const rebuildBotResponse = exec(rebuildBotCmd);
         console.log("Rebuild Bot Response: ", rebuildBotResponse);
       }
