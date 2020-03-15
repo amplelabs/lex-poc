@@ -6,7 +6,9 @@ const args = require("yargs").array("intents").argv;
 const exec = require("child_process").execSync;
 const csv = require("csv-parser");
 const fs = require("fs");
-const region_id = "us-east-1";
+require('dotenv').config()
+
+const region_id = process.env.REGION_ID;
 
 console.log("Spreadsheet: " + args.sheet);
 console.log("Intent List: " + args.intents);
