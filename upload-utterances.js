@@ -100,12 +100,9 @@ async function addUtterances() {
           var getSlotCmd = `aws lex-models get-slot-type --region ${region_id} --name ${slot.slotType} --slot-type-version $LATEST`;
           var getSlotResponse = exec(getSlotCmd);
           var slotChecksum = JSON.parse(getSlotResponse.toString()).checksum;
-          var publishSlotCmd = `aws lex-models create-slot-type-version --region ${region_id} --name ${slot.slotType} --checksum ${slotChecksum} > slot.json`
+          var publishSlotCmd = `aws lex-models create-slot-type-version --region ${region_id} --name ${slot.slotType} --checksum ${slotChecksum}`
           var pubishSlotResponse = exec(publishSlotCmd);
-          var slotData= fs.readFileSync("slot.json");
-          var slotJson = JSON.parse(slotData);
-          // var versionNo = JSON.parse(pubishSlotResponse.toString()).version;
-          var versionNo = slotJson.version;
+          var versionNo = JSON.parse(pubishSlotResponse.toString()).version;
           console.log(`For slot type: ${slot.slotType}, the new version number is: ${versionNo}`);
           // Update this version number in the intent json 
           slot.slotTypeVersion = versionNo;
